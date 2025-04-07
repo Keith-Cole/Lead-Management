@@ -317,52 +317,39 @@ def display_dashboard():
         df['created_at'] = pd.to_datetime(df['created_at']).dt.strftime('%Y-%m-%d %H:%M')
         df['next_followup'] = pd.to_datetime(df['next_followup']).dt.strftime('%Y-%m-%d %H:%M')
         
-        # Add action column for active leads
-        def create_action_buttons(row):
-            if row['status'] == 'Active':
-                close_button = f"<a href='#' onclick=\"markLeadStatus('{row['id']}', 'Closed'); return false;\">Mark Closed</a>"
-                lost_button = f"<a href='#' onclick=\"markLeadStatus('{row['id']}', 'Lost'); return false;\">Mark Lost</a>"
-                return f"{close_button} | {lost_button}"
-            return ""
-        
-        df['Actions'] = df.apply(create_action_buttons, axis=1)
-        
-        # Add custom styling for lead status
-        def style_status(val):
-            if val == 'Closed':
-                return 'background-color: #28a745; color: white;'
-            elif val == 'Lost':
-                return 'background-color: #dc3545; color: white;'
-            else:
-                return 'background-color: #ffc107; color: black;'
-        
-        # Define columns to display
-        display_columns = ['name', 'source', 'contact_method', 'lead_status', 'quote_status', 
-                           'quoted_price', 'next_followup', 'status', 'Actions']
-        
-        st.dataframe(df[display_columns].style.applymap(style_status, subset=['status']))
-        
-        # JavaScript for button actions
-        st.markdown("""
-        <script>
-        function markLeadStatus(leadId, newStatus) {
-            const data = {
-                leadId: leadId,
-                newStatus: newStatus
-            };
+        # Create action buttons column
+        if 'status' in df.columns:
+            # Create two columns for action buttons
+            col1, col2 = st.columns([3, 1])
             
-            fetch('/update_status', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(data)
-            }).then(() => {
-                window.location.reload();
-            });
-        }
-        </script>
-        """, unsafe_allow_html=True)
+            with col1:
+                # Display the dataframe
+                display_columns = ['name', 'source', 'contact_method', 'lead_status', 'quote_status', 
+                                'quoted_price', 'next_followup', 'status']
+                st.dataframe(df[display_columns])
+            
+            with col2:
+                # Add action buttons for active leads
+                st.write("Actions")
+                for idx, row in df.iterrows():
+                    if row['status'] == 'Active':
+                        st.write(f"**{row['name']}**")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button(f"Close", key=f"close_{row['id']}"):
+                                if update_lead_status(row['id'], 'Closed'):
+                                    st.success("Lead marked as Closed")
+                                    st.rerun()
+                                else:
+                                    st.error("Error updating lead")
+                        with col2:
+                            if st.button(f"Lost", key=f"lost_{row['id']}"):
+                                if update_lead_status(row['id'], 'Lost'):
+                                    st.success("Lead marked as Lost")
+                                    st.rerun()
+                                else:
+                                    st.error("Error updating lead")
+                        st.markdown("---")
     else:
         st.info("No leads found. Get started by adding a new lead!")
 
@@ -372,16 +359,16 @@ def display_add_lead_form():
     
     # Create a form
     with st.form("lead_form"):
-        name = st.text_input("Name", required=True)
+        name = st.text_input("Name")
         source = st.selectbox("Source", ["", "Smart Financial", "Media Alpha", "Website", 
                                         "Referral", "Social Media", "Email", "Phone", "Other"], 
-                              index=0, required=True)
-        contact_method = st.text_input("Contact Method", required=True)
+                              index=0)
+        contact_method = st.text_input("Contact Method")
         quote_status = st.selectbox("Quote Status", ["", "Requested", "Sent", "Negotiating", 
                                                    "Accepted", "Declined"], 
-                                   index=0, required=True)
+                                   index=0)
         lead_status = st.selectbox("Lead Status", ["", "Hot", "Warm", "Cold"], 
-                                  index=0, required=True)
+                                  index=0)
         quoted_price = st.number_input("Quoted Price ($)", min_value=0.0, value=None, 
                                       format="%.2f", help="Optional: Enter quoted price for recommended home coverage")
         
@@ -390,6 +377,7 @@ def display_add_lead_form():
         
     # Handle form submission
     if submitted:
+        # Validate required fields
         if not name or not source or not contact_method or not quote_status or not lead_status:
             st.error("Please fill in all required fields")
         else:
@@ -457,7 +445,7 @@ def display_reports():
             })
             st.dataframe(status_df)
             
-            # Create a pie chart
+            # Create a bar chart
             st.bar_chart(status_df.set_index('Status'))
     
     with col2:
@@ -468,7 +456,7 @@ def display_reports():
             })
             st.dataframe(lead_status_df)
             
-            # Create a pie chart
+            # Create a bar chart
             st.bar_chart(lead_status_df.set_index('Temperature'))
     
     if st.button("Back to Dashboard"):
